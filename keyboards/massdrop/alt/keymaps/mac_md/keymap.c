@@ -62,19 +62,20 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     */
 };
 
-// Runs just one time when the keyboard initializes.
-void matrix_init_user(void) {
-    // Disable LEDS by default
-    led_enabled = 0;
-    I2C3733_Control_Set(led_enabled);
-};
+// The Massdrop fork's USB state machine treats every USB-ON transition
+// (including fresh enumeration at boot) as a wake event, and unconditionally
+// enables the LED drivers in suspend_wakeup_init. Overriding the user hook
+// here flips them back off — handles plug-in and wake-from-sleep alike.
+void suspend_wakeup_init_user(void) {
+    I2C3733_Control_Set(0);
+}
 
 // Runs constantly in the background, in a loop.
 void matrix_scan_user(void) {
 };
 
-#define MODS_SHIFT  (get_mods() & MOD_BIT(KC_LSHIFT) || get_mods() & MOD_BIT(KC_RSHIFT))
-#define MODS_CTRL  (get_mods() & MOD_BIT(KC_LCTL) || get_mods() & MOD_BIT(KC_RCTRL))
+#define MODS_SHIFT  (get_mods() & MOD_BIT(KC_LSFT) || get_mods() & MOD_BIT(KC_RSFT))
+#define MODS_CTRL  (get_mods() & MOD_BIT(KC_LCTL) || get_mods() & MOD_BIT(KC_RCTL))
 #define MODS_ALT  (get_mods() & MOD_BIT(KC_LALT) || get_mods() & MOD_BIT(KC_RALT))
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -126,20 +127,17 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
         case L_T_ONF:
             if (record->event.pressed) {
-                led_enabled = !led_enabled;
-                I2C3733_Control_Set(led_enabled);
+                I2C3733_Control_Set(!I2C3733_Control_Get());
             }
             return false;
         case L_ON:
             if (record->event.pressed) {
-                led_enabled = 1;
-                I2C3733_Control_Set(led_enabled);
+                I2C3733_Control_Set(1);
             }
             return false;
         case L_OFF:
             if (record->event.pressed) {
-                led_enabled = 0;
-                I2C3733_Control_Set(led_enabled);
+                I2C3733_Control_Set(0);
             }
             return false;
         case L_T_BR:
