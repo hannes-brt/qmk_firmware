@@ -62,12 +62,21 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     */
 };
 
-// The Massdrop fork's USB state machine treats every USB-ON transition
-// (including fresh enumeration at boot) as a wake event, and unconditionally
-// enables the LED drivers in suspend_wakeup_init. Overriding the user hook
-// here flips them back off — handles plug-in and wake-from-sleep alike.
+// Whether the global RGB rotate pattern is currently driving all LEDs.
+// We toggle this instead of shutting down the LED chip so that per-layer
+// indicator instructions and the platform's caps-lock invert hook stay
+// visible regardless of the pattern state.
+static bool rgb_patterns_on = false;
+
+void keyboard_post_init_user(void) {
+    // Patterns off by default; layer/caps indicators still show.
+    led_instructions[0].flags = 0;
+}
+
 void suspend_wakeup_init_user(void) {
-    I2C3733_Control_Set(0);
+    // Reapply the user's pattern preference after a USB-ON transition or
+    // wake-from-sleep, since the platform may reset state on wake.
+    led_instructions[0].flags = rgb_patterns_on ? LED_FLAG_USE_ROTATE_PATTERN : 0;
 }
 
 // Runs constantly in the background, in a loop.
@@ -127,7 +136,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
         case L_T_ONF:
             if (record->event.pressed) {
-                I2C3733_Control_Set(!I2C3733_Control_Get());
+                rgb_patterns_on = !rgb_patterns_on;
+                led_instructions[0].flags = rgb_patterns_on ? LED_FLAG_USE_ROTATE_PATTERN : 0;
             }
             return false;
         case L_ON:
@@ -230,11 +240,22 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 led_instruction_t led_instructions[] = {
-    //Please see ../default_md/keymap.c for examples
+    // Entry 0: rotate pattern toggle. .flags is mutated at runtime by L_T_ONF —
+    // 0 = patterns off, LED_FLAG_USE_ROTATE_PATTERN = patterns on.
+    { .flags = 0 },
 
-    //All LEDs use the user's selected pattern (this is the factory default)
-    { .flags = LED_FLAG_USE_ROTATE_PATTERN },
-    //On layer 2, specific LEDs are red
-    { .flags = LED_FLAG_MATCH_ID | LED_FLAG_MATCH_LAYER | LED_FLAG_USE_RGB, .id0 = 0xFFFFFFFF, .id1 = 0xAAAAAAAA, .id2 = 0x55555555, .id3 = 0x11111111, .layer = 2, .r = 255 },
+    // Layer 1: light all available (non-transparent) keys in green.
+    // Bitmask covers F-keys row, mute, arrow cluster on WASD, vim arrows on UP,
+    // PrtSc/ScrLk/Pause/End, U_T_AGCR (I), MD_BOOT (B), TG_NKRO (N), MO(2)
+    // (RShift), volume up/down, and media keys MRWD/MPLY/MFFD.
+    { .flags = LED_FLAG_MATCH_ID | LED_FLAG_MATCH_LAYER | LED_FLAG_USE_RGB,
+      .id0 = 0xAE825FFF, .id1 = 0x02860803, .id2 = 0x00000007,
+      .layer = 1, .r = 0, .g = 200, .b = 0 },
+
+    // Layer 2: existing umlaut + LED-control highlight.
+    { .flags = LED_FLAG_MATCH_ID | LED_FLAG_MATCH_LAYER | LED_FLAG_USE_RGB,
+      .id0 = 0xFFFFFFFF, .id1 = 0xAAAAAAAA, .id2 = 0x55555555, .id3 = 0x11111111,
+      .layer = 2, .r = 255 },
+
     { .end = 1 }
 };
